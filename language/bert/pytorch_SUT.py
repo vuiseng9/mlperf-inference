@@ -67,8 +67,9 @@ class BERT_PyTorch_SUT():
                 model_output = self.model.forward(input_ids=torch.LongTensor(eval_features.input_ids).unsqueeze(0).to(self.dev),
                     attention_mask=torch.LongTensor(eval_features.input_mask).unsqueeze(0).to(self.dev),
                     token_type_ids=torch.LongTensor(eval_features.segment_ids).unsqueeze(0).to(self.dev))
-                start_scores = model_output.start_logits
-                end_scores = model_output.end_logits
+                start_scores, end_scores = model_output
+                # start_scores = model_output.start_logits
+                # end_scores = model_output.end_logits
                 output = torch.stack([start_scores, end_scores], axis=-1).squeeze(0).cpu().numpy()
 
                 response_array = array.array("B", output.tobytes())
