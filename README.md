@@ -1,3 +1,6 @@
+### This branch aims to reproduce BERT with pytorch backend and onnx backend
+Pls find documentation ```baremetal_README.md```
+
 # MLPerf™ Inference Benchmark Suite
 MLPerf Inference is a benchmark suite for measuring how fast systems can run models in a variety of deployment scenarios. 
 
