@@ -30,7 +30,7 @@ pip install tokenization==1.0.7 ## needed for onnx backend
 conda install -c anaconda protobuf
 conda install pybind11 -c conda-forge
 pip install onnx==1.7.0 # 1.6 fails to compile proto with later protobuf compiler 
-pip inbstall onnxruntime==1.2.0
+pip install onnxruntime==1.2.0
 ```
 
 # Run
