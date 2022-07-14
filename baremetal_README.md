@@ -18,8 +18,9 @@ make setup
 # we ignore building docker
 
 # setup loadgen in conda environment
-cd mlperf-inference/loadgen
+cd mlperf-inference
 git submodule update --init third_party/pybind
+cd mlperf-inference/loadgen
 python3 setup.py install
 
 # setup ML frameworks
