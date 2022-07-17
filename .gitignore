@@ -1,3 +1,4 @@
+*.pickle
 loadgen/dist/
 loadgen/mlperf_loadgen.egg-info/
 loadgen/build/

@@ -248,7 +248,7 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  doc_stride, max_query_length, is_training,
-                                 output_fn, verbose_logging=False):
+                                 output_fn, verbose_logging=False, pad_to_seqlen=True):
   """Loads a data file into a list of `InputBatch`s."""
 
   unique_id = 1000000000
@@ -334,15 +334,16 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       # tokens are attended to.
       input_mask = [1] * len(input_ids)
 
-      # Zero-pad up to the sequence length.
-      while len(input_ids) < max_seq_length:
-        input_ids.append(0)
-        input_mask.append(0)
-        segment_ids.append(0)
+      if pad_to_seqlen is True:
+        # Zero-pad up to the sequence length.
+        while len(input_ids) < max_seq_length:
+          input_ids.append(0)
+          input_mask.append(0)
+          segment_ids.append(0)
 
-      assert len(input_ids) == max_seq_length
-      assert len(input_mask) == max_seq_length
-      assert len(segment_ids) == max_seq_length
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
 
       start_position = None
       end_position = None
