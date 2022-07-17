@@ -9,7 +9,7 @@ conda activate $ENVNAME
 
 pip install openvino-dev==2022.1.0
 
-git clone --branch r2.1-ovsut --recursive https://github.com/mlcommons/inference.git mlperf-inference
+git clone --branch r2.1-ovsut --recursive https://github.com/vuiseng9/mlperf-inference mlperf-inference
 cd mlperf-inference/
 pushd loadgen
 python3 setup.py install
@@ -17,7 +17,7 @@ popd
 
 pushd language/bert
 make setup
-# can be optimized, download many uncessary thing
+# can be optimized, download many uncessary things
 
 pip install tokenization==1.0.7
 python3 -m pip install torch==1.4.0  transformers==2.4.0 #clash of version, need to resolve this

@@ -117,8 +117,6 @@ def main():
     else:
         settings.mode = lg.TestMode.PerformanceOnly
 
-    # settings.mode = lg.TestMode.FindPeakPerformance
-
     log_path = args.log_dir
     if not os.path.exists(log_path):
         os.makedirs(log_path)

@@ -43,9 +43,9 @@ class BERT_OpenVINO_SUT():
 
         print(f"Loading OpenVINO model {self.model_path}")
         self.compiled_model, self.input_port_names = self._setup_model()
-        self.batch_size = 1
-        # if self.batch_size == '':
-            # self.batch_size = self.compiled_model.inputs[0].shape[0]
+        # self.batch_size = 1
+        if self.batch_size == '':
+            self.batch_size = self.compiled_model.inputs[0].shape[0]
 
         self.wrap_input = self._create_input_wrapper_fn(self.input_port_names)
 
