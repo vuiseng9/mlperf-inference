@@ -23,6 +23,7 @@ import collections
 import json
 import tokenization
 import six
+import numpy as np
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
@@ -401,9 +402,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
           tokens=tokens,
           token_to_orig_map=token_to_orig_map,
           token_is_max_context=token_is_max_context,
-          input_ids=input_ids,
-          input_mask=input_mask,
-          segment_ids=segment_ids,
+          input_ids=np.array(input_ids).astype(np.int64)[np.newaxis, :],
+          input_mask=np.array(input_mask).astype(np.int64)[np.newaxis, :],
+          segment_ids=np.array(segment_ids).astype(np.int64)[np.newaxis, :],
           start_position=start_position,
           end_position=end_position,
           is_impossible=example.is_impossible)

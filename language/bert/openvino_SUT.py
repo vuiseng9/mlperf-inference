@@ -72,47 +72,50 @@ class BERT_OpenVINO_SUT():
         print_divider()
         self.qsl = get_squad_QSL(args.max_examples, pad_to_seqlen=self.fixed_length_inference)
 
-        self.counter = 0
-        # self.warmup_sut()
+        # self.warmup_sut() # no advantage per experiments
+
+        def ireq_cb_bs1(infer_request, userdata):
+            scores = list(infer_request.results.values())
+            output = np.stack(scores, axis=-1)
+
+            response_array = array.array("B", output.tobytes())
+            bi = response_array.buffer_info()
+            response = lg.QuerySampleResponse(userdata, bi[0], bi[1])
+            lg.QuerySamplesComplete([response])
+
+        def ireq_cb(infer_request, userdata):
+            if isinstance(userdata, Tuple):
+                userdata, nitem_to_process = userdata
+            else: 
+                nitem_to_process = self.batch_size
+
+            scores = list(infer_request.results.values())
+            output = np.stack(scores, axis=-1)
+
+            # handle each example in a given batch
+            for sample in range(nitem_to_process):
+                response_array = array.array("B", output[sample].tobytes())
+                bi = response_array.buffer_info()
+                response = lg.QuerySampleResponse(userdata[sample], bi[0], bi[1])
+                lg.QuerySamplesComplete([response])
 
         if self.scenario == 'Offline':
             print("Constructing SUT...")
-            self.sut = lg.ConstructSUT(self.issue_queries_offline, self.flush_queries)
+            if self.batch_size == 1:
+                self.infer_queue.set_callback(ireq_cb_bs1)
+                self.sut = lg.ConstructSUT(self.issue_queries_offline_bs1, self.flush_queries)
+            else:
+                raise NotImplementedError("WIP, functional error")
+                self.infer_queue.set_callback(ireq_cb)
+                self.sut = lg.ConstructSUT(self.issue_queries_offline, self.flush_queries)
             print("Finished constructing SUT.")
-
-            def request_complete_callback(infer_request, userdata):
-                if isinstance(userdata, Tuple):
-                    userdata, nitem_to_process = userdata
-                else: 
-                    nitem_to_process = self.batch_size
-
-                scores = list(infer_request.results.values())
-                output = np.stack(scores, axis=-1)
-
-                # handle each example in a given batch
-                for sample in range(nitem_to_process):
-                    response_array = array.array("B", output[sample].tobytes())
-                    bi = response_array.buffer_info()
-                    response = lg.QuerySampleResponse(userdata[sample], bi[0], bi[1])
-                    lg.QuerySamplesComplete([response])
-
-            self.infer_queue.set_callback(request_complete_callback)
 
         elif self.scenario == 'Server': 
             print("Constructing SUT...")
+            self.infer_queue.set_callback(ireq_cb_bs1)
             self.sut = lg.ConstructSUT(self.issue_queries_server, self.flush_queries)
             print("Finished constructing SUT.")
 
-            def completion_callback(infer_request, userdata):
-                scores = list(infer_request.results.values())
-                output = np.stack(scores, axis=-1)
-
-                response_array = array.array("B", output.tobytes())
-                bi = response_array.buffer_info()
-                response = lg.QuerySampleResponse(userdata, bi[0], bi[1])
-                lg.QuerySamplesComplete([response])
-
-            self.infer_queue.set_callback(completion_callback)
         else:
             raise NotImplementedError("Unsupported Scenario")
 
@@ -190,21 +193,21 @@ class BERT_OpenVINO_SUT():
         fd = {
             'input_ids': pad_func(np.stack(
                 np.asarray([f[1].input_ids for f in batched_sample_tuples]).astype(np.int64)[np.newaxis, :])[0, :,
-                         :]),
+                         :].squeeze()),
             'attention_mask': pad_func(np.stack(
                 np.asarray([f[1].input_mask for f in batched_sample_tuples]).astype(np.int64)[np.newaxis, :])[0, :,
-                              :]),
+                              :].squeeze()),
             'token_type_ids': pad_func(np.stack(
                 np.asarray([f[1].segment_ids for f in batched_sample_tuples]).astype(np.int64)[np.newaxis, :])[0,
-                              :, ])
+                              :, ].squeeze())
         }
         fd_id = pad_id_func(np.stack(np.asarray([f[0] for f in batched_sample_tuples])).astype(np.int64))
         return fd_id, fd
 
     def warmup_sut(self):
-        for dummy_id, input_feature in enumerate(self.qsl.eval_features[::100]):
-            fd_id, fd = self.process_batch([(dummy_id, input_feature)])
-            self.infer_queue.start_async(inputs=self.wrap_input(fd), userdata=fd_id)
+        WARMUP_CYCLES = 100
+        for raw_input in self.qsl.eval_features[::WARMUP_CYCLES]:
+            self.infer_queue.start_async(inputs=[raw_input.input_ids, raw_input.input_mask, raw_input.segment_ids])
         self.infer_queue.wait_all()
 
     def _get_next_batch(self, data_queue, n):
@@ -218,7 +221,6 @@ class BERT_OpenVINO_SUT():
 
         for batch_id, batched_queries in enumerate(self._get_next_batch(query_queue, self.batch_size)):
             query_indices, query_inputs = self.process_batch(batched_queries)
-            self.infer_queue.get_idle_request_id()
             self.infer_queue.start_async(inputs=self.wrap_input(query_inputs), userdata=query_indices)
 
         # Custom handling for last batch as remainder in sync
@@ -226,20 +228,16 @@ class BERT_OpenVINO_SUT():
         if last_batch_starting_id < len(query_queue):
             batched_queries = query_queue[last_batch_starting_id:]
             query_indices, query_inputs = self.process_batch(batched_queries)
-            self.infer_queue.get_idle_request_id()
             self.infer_queue.start_async(inputs=self.wrap_input(query_inputs), userdata=(query_indices, len(batched_queries)))
 
+    def issue_queries_offline_bs1(self, query_samples):
+        for query_sample in query_samples:
+            raw_input = self.qsl.get_features(query_sample.index)
+            self.infer_queue.start_async(inputs=[raw_input.input_ids, raw_input.input_mask, raw_input.segment_ids], userdata=query_sample.id)
+
     def issue_queries_server(self, query_samples):
-        for i in range(len(query_samples)):
-            raw_input = self.qsl.get_features(query_samples[i].index)
-            query_id = query_samples[i].id
-            query_input = {
-                'input_ids': np.array(raw_input.input_ids).astype(np.int64)[np.newaxis, :],
-                'attention_mask': np.array(raw_input.input_mask).astype(np.int64)[np.newaxis, :],
-                'token_type_ids': np.array(raw_input.segment_ids).astype(np.int64)[np.newaxis, :]
-            }
-            self.infer_queue.get_idle_request_id()
-            self.infer_queue.start_async(inputs=self.wrap_input(query_input), userdata=query_id)
+        raw_input = self.qsl.get_features(query_samples[0].index) # Server mode uses batch size of 1 per query
+        self.infer_queue.start_async(inputs=[raw_input.input_ids, raw_input.input_mask, raw_input.segment_ids], userdata=query_samples[0].id)
 
     def flush_queries(self):
         self.infer_queue.wait_all()
