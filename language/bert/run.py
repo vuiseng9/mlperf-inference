@@ -20,6 +20,7 @@ import mlperf_loadgen as lg
 import argparse
 import os
 import sys
+from openvino_SUT import print_divider
 sys.path.insert(0, os.getcwd())
 
 def check_positive(value):
@@ -52,7 +53,7 @@ def get_args():
                         help="directory to save logs")
     parser.add_argument('-nireq', '--number_infer_requests', type=check_positive, required=False, default=0,
                       help='Optional. Number of infer requests. Default value is determined automatically for device.')
-    parser.add_argument('-b', '--batch_size', type=str, required=False, default='',
+    parser.add_argument('-b', '--batch_size', type=int, required=False, default=1,
                       help='Optional. ' +
                            'Batch size value. ' +
                            'If not specified, the batch size value is determined from Intermediate Representation')
@@ -68,6 +69,8 @@ def get_args():
     parser.add_argument('-nthreads', '--number_threads', type=int, required=False, default=None,
                       help='Number of threads to use for inference on the CPU, GNA '
                            '(including HETERO and MULTI cases).')
+    parser.add_argument('--dynamic_length', action='store_true',
+                        help='enable dynamic length inference')
     args = parser.parse_args()
     return args
 
@@ -127,11 +130,16 @@ def main():
     log_settings.log_output = log_output_settings
     log_settings.enable_trace = False
 
+    print_divider()
+    print(', '.join([str(settings.scenario.name), str(settings.mode), 'Dynamic Length Inference' if args.dynamic_length else 'Fixed Length Inference']))
+    for attr in list(filter(lambda x: settings.scenario.name.lower() in x, dir(settings))):
+        print("{:50}: {}".format(attr, getattr(settings, attr)))
+    print_divider()
     print("Running LoadGen test...")
     lg.StartTestWithLogSettings(sut.sut, sut.qsl.qsl, settings, log_settings)
 
     if args.accuracy:
-        print("measuring accuracy...")
+        print("Evaluating accuracy...")
         python_path = sys.executable
         cmd = python_path + " {:}/accuracy-squad.py {}".format(
             os.path.dirname(os.path.abspath(__file__)),

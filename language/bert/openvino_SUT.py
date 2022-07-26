@@ -3,17 +3,19 @@
 import array
 import os
 import sys
+import warnings
+from typing import Tuple
 sys.path.insert(0, os.getcwd())
 
 import mlperf_loadgen as lg
 import numpy as np
 from squad_QSL import get_squad_QSL
 
-import functools
-from openvino.tools.benchmark.benchmark import Benchmark
-from openvino.tools.benchmark.utils.utils import get_inputs_info
-from openvino.runtime import Core, get_version, AsyncInferQueue
+from openvino.runtime import Core, get_version, AsyncInferQueue, PartialShape
 from openvino.tools.benchmark.utils.constants import CPU_DEVICE_NAME
+
+def print_divider(divider_len=150):
+    print('-'*divider_len)
 
 def get_version_info(self) -> str:
     print(f"OpenVINO:\n{'': <9}{'API version':.<24} {get_version()}")
@@ -28,31 +30,47 @@ class BERT_OpenVINO_SUT():
     def __init__(self, args):
         self.scenario = args.scenario
         self.model_path = args.model_path
-        self.batch_size = args.batch_size
         self.nireq = args.number_infer_requests
         self.nstreams = args.number_streams
         self.nthreads = args.number_threads
         self.device = CPU_DEVICE_NAME
+        self.fixed_length_inference = not args.dynamic_length
+        if args.batch_size <= 0:
+            raise ValueError("Batch size cannot be lower than or equal to 0")
+        elif args.batch_size != 1 and args.scenario == 'Server':
+            warnings.warn("Server scenario requires batch size of 1. Input batch size is ignored")
+            self.batch_size = 1
+        else:
+            self.batch_size = args.batch_size
 
+        if args.dynamic_length is True and self.scenario == 'Offline' and self.batch_size > 1:
+            raise NotImplementedError("Dynamic length with batch size > 1 is not supported for offline Unsupported ")
         self.core = Core()
 
+        # Device Setup
         self.device_config = self._init_device_config()
-        #TODO: override config per input
         self._set_device_config(self.device_config)
         self.print_device_property()
 
-        print(f"Loading OpenVINO model {self.model_path}")
+        # Model Setup
+        print_divider()
+        print(f"Loading OpenVINO model: \n\t{self.model_path}")
         self.compiled_model, self.input_port_names = self._setup_model()
-        # self.batch_size = 1
-        if self.batch_size == '':
-            self.batch_size = self.compiled_model.inputs[0].shape[0]
+        print(self.compiled_model)
 
+        # InferRequest Setup
         self.wrap_input = self._create_input_wrapper_fn(self.input_port_names)
-
         self.infer_queue = AsyncInferQueue(self.compiled_model, self.nireq)
         self.nireq = len(self.infer_queue)
 
-        self.qsl = get_squad_QSL(args.max_examples, pad_to_seqlen=True)
+        print_divider()
+        print("AsyncInferQueue settings:\n\t{} streams, {} threads, {} infer requests".format(
+            self.core.get_property(CPU_DEVICE_NAME, "NUM_STREAMS"),
+            self.core.get_property(CPU_DEVICE_NAME, "INFERENCE_NUM_THREADS"),
+            self.nireq))
+
+        print_divider()
+        self.qsl = get_squad_QSL(args.max_examples, pad_to_seqlen=self.fixed_length_inference)
 
         self.counter = 0
         # self.warmup_sut()
@@ -63,11 +81,16 @@ class BERT_OpenVINO_SUT():
             print("Finished constructing SUT.")
 
             def request_complete_callback(infer_request, userdata):
+                if isinstance(userdata, Tuple):
+                    userdata, nitem_to_process = userdata
+                else: 
+                    nitem_to_process = self.batch_size
+
                 scores = list(infer_request.results.values())
                 output = np.stack(scores, axis=-1)
 
                 # handle each example in a given batch
-                for sample in range(self.batch_size):
+                for sample in range(nitem_to_process):
                     response_array = array.array("B", output[sample].tobytes())
                     bi = response_array.buffer_info()
                     response = lg.QuerySampleResponse(userdata[sample], bi[0], bi[1])
@@ -95,12 +118,24 @@ class BERT_OpenVINO_SUT():
 
 
     def _setup_model(self):
-        compiled_model = self.core.compile_model(self.model_path, self.device)
+        loaded_model = self.core.read_model(self.model_path)
+
+        if self.fixed_length_inference is True:
+            seqlen=384
+        else:
+            seqlen=-1
+        
+        new_shape_cfg = {}
+        for iport in loaded_model.inputs:
+            new_shape_cfg[iport.any_name] = PartialShape([self.batch_size, seqlen])
+        loaded_model.reshape(new_shape_cfg)
+
+        compiled_model = self.core.compile_model(loaded_model, self.device)
         input_port_names = [iport.any_name for iport in compiled_model.inputs]
         return compiled_model, input_port_names
 
     def _init_device_config(self):
-        return {
+        config = {
                 CPU_DEVICE_NAME :
                     dict(
                             PERF_COUNT='NO', 
@@ -108,6 +143,12 @@ class BERT_OpenVINO_SUT():
                             NUM_STREAMS='-1'
                         )
                 }
+        if self.nthreads is not None:
+            config[CPU_DEVICE_NAME]['INFERENCE_NUM_THREADS'] = str(self.nthreads)
+        if self.nstreams is not None:
+            config[CPU_DEVICE_NAME]['NUM_STREAMS'] = str(self.nstreams)
+        config[CPU_DEVICE_NAME]['PERFORMANCE_HINT_NUM_REQUESTS'] = str(self.nireq)
+        return config
 
     def _set_device_config(self, config = {}):
         for device in config.keys():
@@ -115,6 +156,7 @@ class BERT_OpenVINO_SUT():
 
     def print_device_property(self):
         keys = self.core.get_property(CPU_DEVICE_NAME, 'SUPPORTED_PROPERTIES')
+        print_divider()
         print(f'DEVICE: {CPU_DEVICE_NAME}')
         for k in keys:
             if k not in ('SUPPORTED_METRICS', 'SUPPORTED_CONFIG_KEYS', 'SUPPORTED_PROPERTIES'):
@@ -137,8 +179,14 @@ class BERT_OpenVINO_SUT():
         x_pad[:x.shape[0], :x.shape[1]] = x
         return x_pad
 
+    def pad_id_to_batch(self, x):
+        x_pad = np.zeros((self.batch_size), dtype=np.int64)
+        x_pad[:x.shape[0]] = x
+        return x_pad
+
     def process_batch(self, batched_sample_tuples):
         pad_func = lambda x: self.pad_to_batch(x) if len(batched_sample_tuples) != self.batch_size else x
+        pad_id_func = lambda x: self.pad_id_to_batch(x) if len(batched_sample_tuples) != self.batch_size else x 
         fd = {
             'input_ids': pad_func(np.stack(
                 np.asarray([f[1].input_ids for f in batched_sample_tuples]).astype(np.int64)[np.newaxis, :])[0, :,
@@ -150,7 +198,7 @@ class BERT_OpenVINO_SUT():
                 np.asarray([f[1].segment_ids for f in batched_sample_tuples]).astype(np.int64)[np.newaxis, :])[0,
                               :, ])
         }
-        fd_id = np.stack(np.asarray([f[0] for f in batched_sample_tuples]))
+        fd_id = pad_id_func(np.stack(np.asarray([f[0] for f in batched_sample_tuples])).astype(np.int64))
         return fd_id, fd
 
     def warmup_sut(self):
@@ -161,16 +209,25 @@ class BERT_OpenVINO_SUT():
 
     def _get_next_batch(self, data_queue, n):
         for i in range(0, len(data_queue), n):
-            yield data_queue[i:i + n]
+            if (i+n) <= len(data_queue): 
+                yield data_queue[i:i + n]
 
     def issue_queries_offline(self, query_samples):
         # create a queue of query associated with its id
         query_queue = [(query_samples[i].id, self.qsl.get_features(query_samples[i].index)) for i in range(len(query_samples))]
 
-        for _, batched_queries in enumerate(self._get_next_batch(query_queue, self.batch_size)):
+        for batch_id, batched_queries in enumerate(self._get_next_batch(query_queue, self.batch_size)):
             query_indices, query_inputs = self.process_batch(batched_queries)
             self.infer_queue.get_idle_request_id()
             self.infer_queue.start_async(inputs=self.wrap_input(query_inputs), userdata=query_indices)
+
+        # Custom handling for last batch as remainder in sync
+        last_batch_starting_id = (batch_id + 1) * self.batch_size
+        if last_batch_starting_id < len(query_queue):
+            batched_queries = query_queue[last_batch_starting_id:]
+            query_indices, query_inputs = self.process_batch(batched_queries)
+            self.infer_queue.get_idle_request_id()
+            self.infer_queue.start_async(inputs=self.wrap_input(query_inputs), userdata=(query_indices, len(batched_queries)))
 
     def issue_queries_server(self, query_samples):
         for i in range(len(query_samples)):
