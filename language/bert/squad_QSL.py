@@ -31,11 +31,15 @@ max_seq_length = 384
 max_query_length = 64
 doc_stride = 128
 
+CACHE_PADDED_PATH='eval_features.pickle'
+CACHE_NONPAD_PATH='eval_features_nopad.pickle'
+
 class SQuAD_v1_QSL():
-    def __init__(self, total_count_override=None, perf_count_override=None, cache_path='eval_features.pickle'):
+    def __init__(self, total_count_override=None, perf_count_override=None, pad_to_seqlen=True):
         print("Constructing QSL...")
         eval_features = []
         # Load features if cached, convert from examples otherwise.
+        cache_path = CACHE_PADDED_PATH if pad_to_seqlen is True else CACHE_NONPAD_PATH
         if os.path.exists(cache_path):
             print("Loading cached features from '%s'..." % cache_path)
             with open(cache_path, 'rb') as cache_file:
@@ -68,7 +72,8 @@ class SQuAD_v1_QSL():
                 max_query_length=max_query_length,
                 is_training=False,
                 output_fn=append_feature,
-                verbose_logging=False)
+                verbose_logging=False,
+                pad_to_seqlen=pad_to_seqlen)
 
             print("Caching features at '%s'..." % cache_path)
             with open(cache_path, 'wb') as cache_file:
@@ -92,5 +97,5 @@ class SQuAD_v1_QSL():
     def __del__(self):
         print("Finished destroying QSL.")
 
-def get_squad_QSL(total_count_override=None, perf_count_override=None):
-    return SQuAD_v1_QSL(total_count_override, perf_count_override)
+def get_squad_QSL(total_count_override=None, perf_count_override=None, pad_to_seqlen=True):
+    return SQuAD_v1_QSL(total_count_override, perf_count_override, pad_to_seqlen=pad_to_seqlen)
