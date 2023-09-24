@@ -2,6 +2,12 @@
 
 Please see [this readme](README_cm.md) file for an automated way to run this benchmark out of the box and do an end-to-end submission with or without docker using the [MLCommons CM](https://github.com/mlcommons/ck/tree/master/cm) language.
 
+### Clone 
+```sh
+git clone --recurse-submodules -b v3.1-ref-gptj https://github.com/vuiseng9/mlperf-inference mlperf_inference
+cd mlperf_inference
+cd language/gpt-j/
+```
 ### Setup Instructions
 
 ```bash
@@ -14,8 +20,9 @@ conda install gperftools jemalloc==5.2.1 -c conda-forge -y
 
 # install pytorch
 # you can find other nightly version in https://download.pytorch.org/whl/nightly/
-pip install https://download.pytorch.org/whl/nightly/cpu-cxx11-abi/torch-2.0.0.dev20230228%2Bcpu.cxx11.abi-cp39-cp39-linux_x86_64.whl
-
+# pip install https://download.pytorch.org/whl/nightly/cpu-cxx11-abi/torch-2.0.0.dev20230228%2Bcpu.cxx11.abi-cp39-cp39-linux_x86_64.whl
+# nightly build will be flushed in future, a version is pushed to this branch
+pip install torch==2.0.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # installation
 pip install transformers datasets evaluate accelerate simplejson nltk rouge_score
@@ -30,10 +37,6 @@ export LD_PRELOAD=${LD_PRELOAD}:${CONDA_PREFIX}/lib/libiomp5.so
 export LD_PRELOAD=${LD_PRELOAD}:${CONDA_PREFIX}/lib/libtcmalloc.so
 ```
 ### Build Loadgen
-```sh
-git clone --recurse-submodules https://github.com/mlcommons/inference.git mlperf_inference
-```
-
 Build:
 
 ```sh
@@ -41,12 +44,6 @@ cd mlperf_inference/loadgen
 CFLAGS="-std=c++14 -O3" python setup.py bdist_wheel
 cd ..; pip install --force-reinstall loadgen/dist/`ls -r loadgen/dist/ | head -n1` ; cd -
 cd ../..
-```
-### Clone 
-```sh
-git clone https://github.com/mlcommons/inference.git
-cd inference
-cd language/gpt-j/
 ```
 
 
@@ -64,15 +61,21 @@ _Intel expressly disclaims the accuracy, adequacy, or completeness of any public
 Downloads CNN-Daily Mail dataset and creates the calibration dataset (JSON) for post-training quantization
 ```
 pip install datasets
-python prepare-calibration.py --calibration-list-file calibration-list.txt --output-dir </path/to/output-folder>
+python prepare-calibration.py --calibration-list-file calibration-list.txt --output-dir ./data
 ```
 ### Download GPT-J model
 Please download the internal fine-tuned GPT-J checkpoint and rename it as model/. The download_gptj.py only downloads the default huggingface model which is not fine-tuned on CNN-Daily mail dataset.
+```
+python download_gptj.py
+```
 
 ### Running the Benchmark
 Replace the model and dataset path arguments with your corresponding paths. For evaluating the ROUGE score after the run, include --accuracy as shown below. For user specific target qps, please include user.conf.
 ```
 python main.py --scenario=[Offline | Server | SingleStream] --model-path=./model/ --dataset-path=./data/cnn_eval.json [--accuracy] --max_examples=[Maximum number of examples to consider] [--gpu]
+
+# quick run (3 samples)
+python main.py --scenario=Offline --model-path=./model --dataset-path=./data/cnn_eval.json --accuracy --max_examples=3
 ```
 ### Evaluate accuracy run 
 Evaluates the ROGUE scores from the accuracy logs. Only applicable when specifying [--accuracy] while running main.py
