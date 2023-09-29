@@ -76,6 +76,7 @@ python main.py --scenario=[Offline | Server | SingleStream] --model-path=./model
 
 # quick run (3 samples)
 python main.py --scenario=Offline --model-path=./model --dataset-path=./data/cnn_eval.json --accuracy --max_examples=3
+python main.py --gpu --scenario=Offline --model-path=EleutherAI/gpt-j-6B --dataset-path=./data/cnn_eval.json --accuracy --max_examples=3
 ```
 ### Evaluate accuracy run 
 Evaluates the ROGUE scores from the accuracy logs. Only applicable when specifying [--accuracy] while running main.py

@@ -36,7 +36,10 @@ class SUT_base():
             self.amp_dtype = torch.float16
         else:
             self.amp_enabled = False
-            self.amp_dtype = torch.float32
+            if self.use_gpu is True:
+                self.amp_dtype = torch.float16
+            else:
+                self.amp_dtype = torch.float32
 
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
