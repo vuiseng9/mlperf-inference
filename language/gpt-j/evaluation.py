@@ -17,6 +17,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 def get_args():
     """Parse commandline."""
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model-path", default="EleutherAI/gpt-j-6B", help="")
     parser.add_argument("--mlperf-accuracy-file", required=True, help="path to mlperf_log_accuracy.json")
     parser.add_argument("--dataset-file", required=True, help="path to cnn_eval.json")
     parser.add_argument("--verbose", action="store_true", help="verbose messages")
@@ -37,7 +38,7 @@ def postprocess_text(preds, targets):
 def main():
 
     args = get_args()
-    model_name = "EleutherAI/gpt-j-6B"
+    model_name = args.model_path
     dataset_path = args.dataset_file
     metric = evaluate.load("rouge")
     nltk.download('punkt')

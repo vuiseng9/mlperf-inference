@@ -93,6 +93,8 @@ python main.py --gpu --scenario=Offline --model-path=EleutherAI/gpt-j-6B --datas
 ### Evaluate accuracy run 
 Evaluates the ROGUE scores from the accuracy logs. Only applicable when specifying [--accuracy] while running main.py
 ```
+# New feature: main.py merges the following script to streamline the evaluation. No additional step needed
+# Legacy - keep this for reference
 python evaluation.py --mlperf-accuracy-file ./build/logs/mlperf_log_accuracy.json --dataset-file ./data/cnn_eval.json
 ```
 

@@ -87,6 +87,18 @@ def main():
     print("Destroying QSL...")
     lg.DestroyQSL(sut.qsl)
 
+    if args.accuracy:
+        prediction_json = os.path.join(log_path, "mlperf_log_accuracy.json")
+
+        if os.path.exists(prediction_json):
+            print("Evaluating accuracy...")
+            python_path = sys.executable
+            cmd =  f"{python_path} {os.path.dirname(os.path.abspath(__file__))}/evaluation.py --model-path {args.model_path} --mlperf-accuracy-file {prediction_json} --dataset-file {args.dataset_path}"
+            print(f'Run: {cmd}')
+            subprocess.check_call(cmd, shell=True)
+
+        else:
+            raise ValueError("Logical Bug. Pls debug")
 
 if __name__ == "__main__":
     main()
