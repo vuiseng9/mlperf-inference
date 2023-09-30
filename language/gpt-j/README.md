@@ -52,6 +52,13 @@ Downloads the raw data, processes and saves it as json file inside data/
 ```
 python download_cnndm.py
 ```
+Trim datasets
+```
+# e.g.
+python trim_cnndaily.py ./data/cnn_eval.json 10
+python trim_cnndaily.py ./data/cnn_eval.json 20
+python trim_cnndaily.py ./data/cnn_eval.json 50
+```
 
 _To the extent that any public datasets are referenced by Intel or accessed using tools or code provided by Intel those datasets are provided by the third party indicated as the data source. Intel does not create the data, or datasets, and does not warrant their accuracy or quality. By accessing the public dataset(s) you agree to the terms associated with those datasets and that your use complies with the applicable license._
 
@@ -76,7 +83,12 @@ python main.py --scenario=[Offline | Server | SingleStream] --model-path=./model
 
 # quick run (3 samples)
 python main.py --scenario=Offline --model-path=./model --dataset-path=./data/cnn_eval.json --accuracy --max_examples=3
+
+# with GPU
 python main.py --gpu --scenario=Offline --model-path=EleutherAI/gpt-j-6B --dataset-path=./data/cnn_eval.json --accuracy --max_examples=3
+
+# Preferred method - use trimmed dataset because encoding time is significant shorter
+python main.py --gpu --scenario=Offline --model-path=EleutherAI/gpt-j-6B --dataset-path=./data/cnn_eval_10_samples.json --accuracy
 ```
 ### Evaluate accuracy run 
 Evaluates the ROGUE scores from the accuracy logs. Only applicable when specifying [--accuracy] while running main.py

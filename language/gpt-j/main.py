@@ -30,7 +30,7 @@ def get_args():
         "--mlperf_conf", default="mlperf.conf", help="mlperf rules config")
     parser.add_argument("--user_conf", default="user.conf",
                         help="user config for user LoadGen settings such as target QPS")
-    parser.add_argument("--max_examples", type=int, default=13368,
+    parser.add_argument("--max_examples", type=int, default=None,
                         help="Maximum number of examples to consider (not limited by default)")
     args = parser.parse_args()
     return args
